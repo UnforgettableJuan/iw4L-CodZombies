@@ -16,18 +16,20 @@ Expected BO1 zone names, to be confirmed by `--list` on a real install:
 ```bash
 iw4l inspect-zone --list zombie                 # every matching .ff, game, version
 iw4l inspect-zone t5:zombie_theater             # one zone by name
-iw4l inspect-zone 't5:zombie_*' --names         # every BO1 zombies zone
+iw4l inspect-zone 't5:zombie*' --names          # every BO1 zombies zone
 iw4l inspect-zone "D:/Games/Black Ops/zone/Common/zombie_moon.ff"   # a path
-make inspect-zone ZONE='t5:zombie_*'            # same, from the repo
+make inspect-zone ZONE='t5:zombie*'             # same, from the repo
 ```
 
-Names need `IW4L_GAMES` (the folder holding your game folders); a path does
-not. Nothing opens a window or touches the GPU. Per zone it prints the asset
+Names and patterns search `IW4L_GAMES` (the folder holding your game folders)
+and the Call of Duty folders of every Steam library; a path needs neither.
+Nothing opens a window or touches the GPU. Per zone it prints the asset
 list by type (inline, shared, null, walked), the first asset type the walk
 cannot parse, where and why the walk stopped, the world parts it reached, and
 a classname histogram of the map entities. A full report with asset and raw
 file names lands in `iw4l-artifacts/inspect/`. Exit 0 means every walk
-completed, 1 that one stopped or a zone could not be read, 2 bad arguments.
+completed (other games' zones are skipped), 1 that one stopped or a zone
+could not be read, 2 bad arguments.
 
 The t5 walk has no loader yet for eleven asset types (`aitype`, `character`,
 `xmodelalias`, `weapondef`, `weaponvariant`, `menu`, `ui_map`, `mptype`,

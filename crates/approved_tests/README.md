@@ -5,7 +5,8 @@ APPROVED TEST POLICY
 Only explicitly owner-approved end-to-end scenarios may exist in this crate.
 Agents may create temporary tests and probes during development, but those
 must be deleted before the final squash/push unless specifically approved. A
-useful test is not automatically an approved test.
+useful test is not automatically an approved test. Unit tests that assert
+behaviour without game data are not temporary and stay in their crate.
 
 A new permanent scenario is added here only after the owner has approved that
 scenario by name, as a scenario the runner drives, never as a `cargo test`.

@@ -41,6 +41,7 @@ pub struct Stop {
     pub cursor_after: usize,
     pub reason: String,
     pub last_named: Vec<(&'static str, String)>,
+    pub started_techset: Option<String>,
     pub unsettled_offsets: usize,
     pub first_unsettled: Option<String>,
     pub next_bytes: String,
@@ -178,7 +179,13 @@ pub fn inventory_t5_image(image: &[u8]) -> Result<T5Inventory, String> {
 
     let mut sink = InventorySink::default();
     for (index, &(raw, placement)) in entries.iter().enumerate() {
-        let cursor = s.cursor();
+        let at = EntryAt {
+            index,
+            raw_type: raw,
+            placement,
+            cursor: s.cursor(),
+            techset_before: s.latest_technique_set().and_then(|g| g.name),
+        };
         let walked = match (AssetType::from_u32(raw), table.slot(index)) {
             (Some(ty), Some(slot)) => catch_unwind(AssertUnwindSafe(|| {
                 fastfile_t5::load_asset_at_observed(&mut s, ty, slot, &mut sink)
@@ -194,11 +201,11 @@ pub fn inventory_t5_image(image: &[u8]) -> Result<T5Inventory, String> {
                 if body {
                     let count = inventory.types.entry(raw).or_default();
                     count.walked += 1;
-                    count.bytes += s.cursor().saturating_sub(cursor);
+                    count.bytes += s.cursor().saturating_sub(at.cursor);
                 }
             }
             Err(reason) => {
-                inventory.stop = Some(stop_at(&s, image, index, raw, placement, cursor, reason));
+                inventory.stop = Some(stop_at(&s, image, &at, reason));
                 break;
             }
         }
@@ -207,14 +214,17 @@ pub fn inventory_t5_image(image: &[u8]) -> Result<T5Inventory, String> {
         match s.pop() {
             Ok(()) => inventory.trailing_bytes = Some(s.remaining()),
             Err(error) => {
-                let cursor = s.cursor();
+                let at = EntryAt {
+                    index: entries.len(),
+                    raw_type: u32::MAX,
+                    placement: Placement::Inline,
+                    cursor: s.cursor(),
+                    techset_before: s.latest_technique_set().and_then(|g| g.name),
+                };
                 inventory.stop = Some(stop_at(
                     &s,
                     image,
-                    entries.len(),
-                    u32::MAX,
-                    Placement::Inline,
-                    cursor,
+                    &at,
                     format!("closing the asset list: {error}"),
                 ));
             }
@@ -244,36 +254,43 @@ pub fn inventory_t5_image(image: &[u8]) -> Result<T5Inventory, String> {
     Ok(inventory)
 }
 
-fn stop_at(
-    s: &ZoneStream<'_>,
-    image: &[u8],
+struct EntryAt {
     index: usize,
     raw_type: u32,
     placement: Placement,
     cursor: usize,
-    reason: String,
-) -> Stop {
+    techset_before: Option<Ptr>,
+}
+
+fn stop_at(s: &ZoneStream<'_>, image: &[u8], at: &EntryAt, reason: String) -> Stop {
+    let techset_now = s.latest_technique_set().and_then(|g| g.name);
+    let started_techset = (techset_now != at.techset_before)
+        .then(|| name_at(s, techset_now))
+        .flatten();
+    let last_techset = if started_techset.is_some() {
+        at.techset_before
+    } else {
+        techset_now
+    };
     let last_named = [
         ("last_xmodel", s.latest_xmodel().and_then(|g| g.name)),
         ("last_material", s.latest_material().and_then(|g| g.name)),
         ("last_image", s.latest_image().and_then(|g| g.name)),
-        (
-            "last_techset",
-            s.latest_technique_set().and_then(|g| g.name),
-        ),
+        ("last_techset", last_techset),
     ]
     .into_iter()
     .filter_map(|(label, name)| Some((label, name_at(s, name)?)))
     .collect();
-    let next = image.get(cursor..).unwrap_or(&[]);
+    let next = image.get(at.cursor..).unwrap_or(&[]);
     Stop {
-        index,
-        raw_type,
-        placement,
-        cursor,
+        index: at.index,
+        raw_type: at.raw_type,
+        placement: at.placement,
+        cursor: at.cursor,
         cursor_after: s.cursor(),
         reason,
         last_named,
+        started_techset,
         unsettled_offsets: s.unsettled_offsets(),
         first_unsettled: s
             .first_unsettled()

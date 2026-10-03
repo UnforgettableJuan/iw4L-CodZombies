@@ -24,8 +24,9 @@ pub const COMMAND: &str = "inspect-zone";
 pub const USAGE: &str = "usage: iw4l inspect-zone <zone|path|pattern>... [--names]
        iw4l inspect-zone --list [pattern]
 
-  zone     a zone name: t5:zombie_theater picks Black Ops; a bare name takes the
-           first game that has it (MW2, then Black Ops, then MW3)
+  zone     a zone name: t5:zombie_theater picks Black Ops; a bare name inspects
+           the zone in every game that has it, and reports non-Black Ops ones
+           as skipped
   path     a .ff file anywhere on disk; needs no IW4L_GAMES
   pattern  * matches any run of characters, e.g. 't5:zombie_*'
   --names  also print asset names, raw file names, targetnames and entity keys
@@ -33,8 +34,8 @@ pub const USAGE: &str = "usage: iw4l inspect-zone <zone|path|pattern>... [--name
            without * matches anywhere in the name
 
 Each inspected zone also writes a full report, names included, to
-iw4l-artifacts/inspect/. Exit status: 0 every walk completed, 1 a walk stopped
-or a zone could not be inventoried, 2 bad arguments or nothing to inspect.";
+iw4l-artifacts/inspect/. Exit status: 0 every Black Ops walk completed, 1 a walk
+stopped or a zone could not be read, 2 bad arguments or nothing to inspect.";
 
 pub const EXIT_COMPLETE: i32 = 0;
 pub const EXIT_STOPPED: i32 = 1;
@@ -441,16 +442,22 @@ fn inventory_for(
         )
     };
     if game != Some(ZoneGame::T5) {
-        let reason = match game {
-            Some(game) => format!(
-                "the inventory reads Black Ops (t5) zones; this one is {}",
-                game.prefix()
+        let (code, reason) = match game {
+            Some(game) => (
+                EXIT_COMPLETE,
+                format!(
+                    "the inventory reads Black Ops (t5) zones; this one is {}",
+                    game.prefix()
+                ),
             ),
-            None => "not a zone version this runtime reads (MW2 0x114, Black Ops 0x1d9, MW3 0x1)"
-                .to_owned(),
+            None => (
+                EXIT_STOPPED,
+                "not a zone version this runtime reads (MW2 0x114, Black Ops 0x1d9, MW3 0x1)"
+                    .to_owned(),
+            ),
         };
         return (
-            EXIT_STOPPED,
+            code,
             None,
             vec![done("skipped", format!(" reason={}", quoted(&reason)))],
         );

@@ -20,8 +20,12 @@ fn cstr(text: &str) -> Vec<u8> {
 }
 
 fn xfile(body: &[u8]) -> Vec<u8> {
+    xfile_with_blocks(body, BLOCK_BYTES)
+}
+
+fn xfile_with_blocks(body: &[u8], block_bytes: u32) -> Vec<u8> {
     let mut image = words(&[u32::try_from(body.len()).unwrap(), 0]);
-    image.extend(words(&[BLOCK_BYTES; 7]));
+    image.extend(words(&[block_bytes; 7]));
     image.extend_from_slice(body);
     image
 }
@@ -192,6 +196,28 @@ fn stops_at_the_first_inline_type_without_a_loader() {
     assert!(!stop.next_bytes.is_empty());
     assert_eq!(inventory.processed, 1);
     assert_eq!(inventory.types[&(AssetType::RawFile as u32)].walked, 0);
+}
+
+#[test]
+fn a_techset_that_fails_midway_is_not_reported_as_parsed() {
+    let mut body = asset_list(&[
+        (id(AssetType::Localize), FOLLOWING),
+        (id(AssetType::TechniqueSet), FOLLOWING),
+    ]);
+    body.extend(localize("Hello", "ZOMBIE_GREETING"));
+    body.extend(words(&[FOLLOWING, 0, FOLLOWING]));
+    body.extend(words(&[0; 129]));
+    body.extend(cstr("ts_failing"));
+    body.extend(words(&[0]));
+    let inventory = inventory_t5_image(&xfile_with_blocks(&body, 1 << 16)).unwrap();
+    let stop = inventory.stop.expect("walk must stop");
+    assert_eq!(stop.raw_type, AssetType::TechniqueSet as u32);
+    assert_eq!(stop.started_techset.as_deref(), Some("ts_failing"));
+    assert!(
+        stop.last_named.iter().all(|(_, name)| name != "ts_failing"),
+        "{:?}",
+        stop.last_named
+    );
 }
 
 #[test]

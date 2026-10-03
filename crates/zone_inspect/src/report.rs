@@ -85,6 +85,12 @@ pub fn summary(inventory: &T5Inventory, names: bool) -> Vec<String> {
                 named.join(" ")
             ));
         }
+        if let Some(techset) = &stop.started_techset {
+            lines.push(format!(
+                "{PREFIX} stop_context started_in_failing_entry techset={}",
+                quoted(techset)
+            ));
+        }
         lines.push(format!(
             "{PREFIX} stop_detail unsettled_offsets={} first_unsettled={} next_bytes={}",
             stop.unsettled_offsets,

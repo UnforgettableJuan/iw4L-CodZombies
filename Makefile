@@ -95,10 +95,10 @@ export-gltf: require-games
 # map entities. No window, no GPU; a .ff path needs no IW4L_GAMES.
 # A t5: prefix carries a colon, which make reads as a pattern: use ZONE=.
 #   make inspect-zone ZONE=t5:zombie_theater
-#   make inspect-zone ZONE='t5:zombie_*' NAMES=1
+#   make inspect-zone ZONE='t5:zombie*' NAMES=1
 #   make inspect-zone LIST=zombie
 inspect-zone:
-	@test -n "$(or $(ZONE),$(ARGS),$(LIST))" || { echo "usage: make inspect-zone <zone|path>   ZONE='t5:zombie_*'   LIST=zombie"; exit 1; }
+	@test -n "$(or $(ZONE),$(ARGS),$(LIST))" || { echo "usage: make inspect-zone <zone|path>   ZONE='t5:zombie*'   LIST=zombie"; exit 1; }
 	cd $(ROOT) && $(CARGO) run $(PROFILE_ARG) -p launcher -- inspect-zone $(if $(LIST),--list '$(LIST)',$(if $(ZONE),'$(ZONE)',$(ARGS))) $(if $(NAMES),--names,)
 
 # Play a recorded demo under iw4l-artifacts/demos/<name>.iw4ldemo, then quit.
@@ -329,7 +329,7 @@ help:
 	@echo "                  add CMDS='spawn 0; hold +attack' to script it"
 	@echo "                  sync-by-default: map/demo/disconnect/spawn block the FIFO"
 	@echo "                  until done; trailing '&' opts out (map mp_rust &)"
-	@echo "make inspect-zone <zone>  headless zone inventory (ZONE='t5:zombie_*', LIST=zombie, NAMES=1)"
+	@echo "make inspect-zone <zone>  headless zone inventory (ZONE='t5:zombie*', LIST=zombie, NAMES=1)"
 	@echo "make play <demo>  play iw4l-artifacts/demos/<demo>.iw4ldemo, then quit"
 	@echo "                  ZONE= overrides header"
 	@echo "                  CMDS='wait world; wait 5s; quit' mid-play"

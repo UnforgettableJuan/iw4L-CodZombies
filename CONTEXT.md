@@ -242,7 +242,8 @@ runtime, or as the traces of a dig?* The second answer is not a push.
 ```
 1. ship every mrs/ clone that is ready
 2. on the resulting master: delete, rename, strip
-   — probes and tests outside approved_tests go without asking
+   — probes, and tests that only printed something, go without asking;
+     unit tests that need no game data stay
 3. stop. the human reads the diff
 4. one commit, short message, the effect
 5. make publish-check
