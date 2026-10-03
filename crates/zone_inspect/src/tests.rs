@@ -1,4 +1,3 @@
-use std::io::Write as _;
 use std::path::PathBuf;
 
 use fastfile_t5::AssetType;
