@@ -176,7 +176,7 @@ fn inventories_a_zone_that_walks_to_the_end() {
     assert_eq!(inventory.localized_strings, 1);
     assert_eq!(
         inventory.raw_files.get("maps/zombie_test.gsc"),
-        Some(&"main(){}".len().saturating_add(1))
+        Some(&"main(){}".len())
     );
 }
 
@@ -245,7 +245,7 @@ fn runs_end_to_end_on_a_fastfile_path() {
 
     let (_, named) = run_to_string(&[zone.to_str().unwrap(), "--names"], None);
     assert!(
-        named.contains("type=rawfile bytes=9 value=\"maps/zombie_test.gsc\""),
+        named.contains("type=rawfile bytes=8 value=\"maps/zombie_test.gsc\""),
         "{named}"
     );
     let _ = std::fs::remove_dir_all(&dir);
@@ -295,54 +295,108 @@ fn rejects_bad_arguments_with_usage() {
     assert!(out.starts_with("usage: iw4l inspect-zone"), "{out}");
 }
 
-#[test]
-fn lists_and_matches_zones_under_a_games_root() {
-    let dir = scratch("listing");
+fn header(version: u32) -> Vec<u8> {
+    let mut bytes = b"IWffu100".to_vec();
+    bytes.extend(version.to_le_bytes());
+    bytes
+}
+
+fn games_tree(name: &str) -> PathBuf {
+    let dir = scratch(name);
     let zone_dir = dir.join("Black Ops").join("zone").join("Common");
     std::fs::create_dir_all(&zone_dir).unwrap();
-    let header = |version: u32| {
-        let mut bytes = b"IWffu100".to_vec();
-        bytes.extend(version.to_le_bytes());
-        bytes
-    };
     std::fs::write(zone_dir.join("zombie_theater.ff"), header(0x1d9)).unwrap();
     std::fs::write(zone_dir.join("zombie_moon.ff"), header(0x1d9)).unwrap();
     std::fs::write(zone_dir.join("mp_nuked.ff"), header(0x1d9)).unwrap();
+    std::fs::write(zone_dir.join("kowloon.ff"), header(0x1d9)).unwrap();
+    std::fs::write(zone_dir.join("mp_kowloon.ff"), header(0x1d9)).unwrap();
     std::fs::write(dir.join("mp_rust.ff"), header(0x114)).unwrap();
     std::fs::write(zone_dir.join("readme.txt"), b"not a zone").unwrap();
-    let root = GamesRoot(dir.clone());
+    dir
+}
 
+fn resolved_keys(roots: &[GamesRoot], target: &str) -> Vec<String> {
+    let mut roots = Roots(Some(Ok(roots.to_vec())));
+    resolve(target, &mut roots)
+        .into_iter()
+        .map(|r| r.map_or_else(|e| format!("error: {e}"), |(key, _)| key))
+        .collect()
+}
+
+fn listed(roots: &[GamesRoot], filter: Option<&str>) -> String {
     let mut out = Vec::new();
-    assert_eq!(list(&root, Some("zombie"), &mut out), EXIT_COMPLETE);
-    let out = String::from_utf8(out).unwrap();
+    assert_eq!(list(roots, filter, &mut out), EXIT_COMPLETE);
+    String::from_utf8(out).unwrap()
+}
+
+#[test]
+fn lists_zones_under_a_games_root() {
+    let dir = games_tree("listing");
+    let roots = [GamesRoot(dir.clone())];
+
+    let out = listed(&roots, Some("zombie"));
     assert!(out.contains("key=t5:zombie_moon"), "{out}");
     assert!(out.contains("key=t5:zombie_theater"), "{out}");
     assert!(!out.contains("mp_nuked"), "{out}");
     assert!(out.contains("listed zones=2"), "{out}");
 
-    let mut all = Vec::new();
-    list(&root, None, &mut all);
-    let all = String::from_utf8(all).unwrap();
-    assert!(all.contains("listed zones=4"), "{all}");
+    let all = listed(&roots, None);
+    assert!(all.contains("listed zones=6"), "{all}");
     assert!(
         all.contains("key=iw4:mp_rust magic=IWffu100 version=0x114"),
         "{all}"
     );
 
-    let hits: Vec<String> = matching_zones(&root, "t5:*")
-        .into_iter()
-        .map(|(key, _)| key)
-        .collect();
-    assert_eq!(hits, ["t5:mp_nuked", "t5:zombie_moon", "t5:zombie_theater"]);
-    assert!(matching_zones(&root, "iw4:zombie_*").is_empty());
+    let t5 = listed(&roots, Some("t5:"));
+    assert!(t5.contains("listed zones=5"), "{t5}");
+    assert!(!t5.contains("mp_rust"), "{t5}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
-fn report_names_are_file_safe() {
+fn resolves_names_and_patterns_across_roots() {
+    let dir = games_tree("resolving");
+    let nested = GamesRoot(dir.join("Black Ops"));
+    let roots = [GamesRoot(dir.clone()), nested];
+
     assert_eq!(
-        report_file_name("t5:zombie_theater"),
+        resolved_keys(&roots, "t5:*"),
+        [
+            "t5:kowloon",
+            "t5:mp_kowloon",
+            "t5:mp_nuked",
+            "t5:zombie_moon",
+            "t5:zombie_theater"
+        ]
+    );
+    assert_eq!(resolved_keys(&roots, "t5:kowloon"), ["t5:kowloon"]);
+    assert_eq!(
+        resolved_keys(&roots, "ZOMBIE_THEATER"),
+        ["t5:zombie_theater"]
+    );
+    assert_eq!(resolved_keys(&roots, "t5:nuked"), ["t5:nuked"]);
+    assert!(resolved_keys(&roots, "iw4:zombie_*")[0].starts_with("error: no .ff matches"));
+    assert!(resolved_keys(&roots, "t5:zombie_nowhere")[0].starts_with("error: no .ff matches"));
+    assert_eq!(
+        resolved_keys(&roots, "missing/zombie_theater.ff"),
+        ["error: no such file: missing/zombie_theater.ff"]
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn report_names_are_file_safe_and_unique() {
+    let mut used = HashSet::new();
+    assert_eq!(
+        report_file_name("t5:zombie_theater", &mut used),
         "t5_zombie_theater.txt"
     );
-    assert_eq!(report_file_name("unknown:a b/c"), "unknown_a_b_c.txt");
+    assert_eq!(
+        report_file_name("t5:zombie_theater", &mut used),
+        "t5_zombie_theater-2.txt"
+    );
+    assert_eq!(
+        report_file_name("unknown:a b/c", &mut used),
+        "unknown_a_b_c.txt"
+    );
 }

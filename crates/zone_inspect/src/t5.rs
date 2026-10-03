@@ -40,7 +40,7 @@ pub struct Stop {
     pub cursor: usize,
     pub cursor_after: usize,
     pub reason: String,
-    pub recent: Vec<(&'static str, String)>,
+    pub last_named: Vec<(&'static str, String)>,
     pub unsettled_offsets: usize,
     pub first_unsettled: Option<String>,
     pub next_bytes: String,
@@ -253,11 +253,14 @@ fn stop_at(
     cursor: usize,
     reason: String,
 ) -> Stop {
-    let recent = [
-        ("xmodel", s.latest_xmodel().and_then(|g| g.name)),
-        ("material", s.latest_material().and_then(|g| g.name)),
-        ("image", s.latest_image().and_then(|g| g.name)),
-        ("techset", s.latest_technique_set().and_then(|g| g.name)),
+    let last_named = [
+        ("last_xmodel", s.latest_xmodel().and_then(|g| g.name)),
+        ("last_material", s.latest_material().and_then(|g| g.name)),
+        ("last_image", s.latest_image().and_then(|g| g.name)),
+        (
+            "last_techset",
+            s.latest_technique_set().and_then(|g| g.name),
+        ),
     ]
     .into_iter()
     .filter_map(|(label, name)| Some((label, name_at(s, name)?)))
@@ -270,7 +273,7 @@ fn stop_at(
         cursor,
         cursor_after: s.cursor(),
         reason,
-        recent,
+        last_named,
         unsettled_offsets: s.unsettled_offsets(),
         first_unsettled: s
             .first_unsettled()
@@ -340,7 +343,8 @@ impl AssetLinkSink for InventorySink {
         data: &[u8],
         _zlib_compressed: bool,
     ) -> fastfile_t5::Result<()> {
-        self.raw_files.insert(name.to_owned(), data.len());
+        let len = data.strip_suffix(&[0]).map_or(data.len(), <[u8]>::len);
+        self.raw_files.insert(name.to_owned(), len);
         Ok(())
     }
 

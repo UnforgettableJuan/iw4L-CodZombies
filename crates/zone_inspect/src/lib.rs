@@ -5,6 +5,7 @@ mod pattern;
 mod report;
 mod t5;
 
+use std::collections::HashSet;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
@@ -83,15 +84,67 @@ fn emit(out: &mut dyn Write, line: &str) {
 }
 
 #[derive(Default)]
-struct Games(Option<Result<GamesRoot, String>>);
+struct Roots(Option<Result<Vec<GamesRoot>, String>>);
 
-impl Games {
-    fn get(&mut self) -> Result<&GamesRoot, String> {
+impl Roots {
+    fn get(&mut self) -> Result<&[GamesRoot], String> {
         self.0
-            .get_or_insert_with(asset_transport::games_root_from_env)
-            .as_ref()
+            .get_or_insert_with(search_roots)
+            .as_deref()
             .map_err(Clone::clone)
     }
+}
+
+fn search_roots() -> Result<Vec<GamesRoot>, String> {
+    let env = asset_transport::games_root_from_env();
+    let mut roots = Vec::new();
+    let mut seen = HashSet::new();
+    let candidates = env.iter().cloned().chain(
+        asset_transport::steam_cod_folders()
+            .into_iter()
+            .map(GamesRoot),
+    );
+    for root in candidates {
+        let key = std::fs::canonicalize(&root.0).unwrap_or_else(|_| root.0.clone());
+        if seen.insert(key) {
+            roots.push(root);
+        }
+    }
+    if roots.is_empty() {
+        let reason = env.err().unwrap_or_else(|| String::from("no games root"));
+        return Err(format!(
+            "{reason}; set IW4L_GAMES to the folder that holds your game folders, or pass a .ff path"
+        ));
+    }
+    Ok(roots)
+}
+
+fn roots_label(roots: &[GamesRoot]) -> String {
+    roots
+        .iter()
+        .map(|root| root.0.display().to_string())
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+fn zone_files(roots: &[GamesRoot]) -> (Vec<PathBuf>, Vec<String>) {
+    let mut files = Vec::new();
+    let mut errors = Vec::new();
+    let mut seen = HashSet::new();
+    for root in roots {
+        for entry in asset_transport::zone_files(root) {
+            match entry {
+                Ok(path) => {
+                    let key = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+                    if seen.insert(key) {
+                        files.push(path);
+                    }
+                }
+                Err(reason) => errors.push(reason),
+            }
+        }
+    }
+    (files, errors)
 }
 
 pub fn run(args: &[String], artifacts: Option<&Path>, out: &mut dyn Write) -> i32 {
@@ -105,7 +158,7 @@ pub fn run(args: &[String], artifacts: Option<&Path>, out: &mut dyn Write) -> i3
             return EXIT_SETUP;
         }
     };
-    let mut games = Games::default();
+    let mut roots = Roots::default();
     match command {
         Command::Help => {
             for line in USAGE.lines() {
@@ -113,28 +166,24 @@ pub fn run(args: &[String], artifacts: Option<&Path>, out: &mut dyn Write) -> i3
             }
             EXIT_COMPLETE
         }
-        Command::List(filter) => match games.get() {
-            Ok(root) => list(root, filter.as_deref(), out),
+        Command::List(filter) => match roots.get() {
+            Ok(roots) => list(roots, filter.as_deref(), out),
             Err(reason) => {
-                emit(
-                    out,
-                    &format!(
-                        "{PREFIX} error reason={}",
-                        quoted(&format!("--list needs IW4L_GAMES: {reason}"))
-                    ),
-                );
+                emit(out, &format!("{PREFIX} error reason={}", quoted(&reason)));
                 EXIT_SETUP
             }
         },
         Command::Inspect { targets, names } => {
             let mut code = EXIT_COMPLETE;
             let mut inspected = 0usize;
+            let mut reports = HashSet::new();
             for target in &targets {
-                for resolved in resolve(target, &mut games) {
+                for resolved in resolve(target, &mut roots) {
                     match resolved {
                         Ok((label, path)) => {
                             inspected += 1;
-                            code = code.max(inspect_file(&label, &path, names, artifacts, out));
+                            let report = artifacts.map(|dir| (dir, &mut reports));
+                            code = code.max(inspect_file(&label, &path, names, report, out));
                         }
                         Err(reason) => {
                             emit(
@@ -158,30 +207,47 @@ pub fn run(args: &[String], artifacts: Option<&Path>, out: &mut dyn Write) -> i3
     }
 }
 
-fn resolve(target: &str, games: &mut Games) -> Vec<Result<(String, PathBuf), String>> {
+fn looks_like_path(target: &str) -> bool {
+    target.contains(['/', '\\'])
+        || Path::new(target)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("ff"))
+}
+
+fn resolve(target: &str, roots: &mut Roots) -> Vec<Result<(String, PathBuf), String>> {
     let as_path = Path::new(target);
     if as_path.is_file() {
         return vec![Ok((target.to_owned(), as_path.to_path_buf()))];
     }
-    let root = match games.get() {
-        Ok(root) => root,
-        Err(reason) => {
-            return vec![Err(format!(
-                "not a file, and finding a zone by name needs IW4L_GAMES: {reason}"
-            ))];
-        }
+    if looks_like_path(target) {
+        return vec![Err(format!("no such file: {target}"))];
+    }
+    let roots = match roots.get() {
+        Ok(roots) => roots,
+        Err(reason) => return vec![Err(reason)],
     };
-    if pattern::is_pattern(target) {
-        let hits = matching_zones(root, target);
-        if hits.is_empty() {
-            return vec![Err(format!("no .ff under {} matches", root.0.display()))];
-        }
+    let (game, stem_pattern) = pattern_filter(target);
+    let (files, _) = zone_files(roots);
+    let mut hits: Vec<(String, PathBuf)> = files
+        .into_iter()
+        .filter(|path| pattern::matches(&stem_pattern, &stem_of(path)))
+        .filter_map(|path| {
+            let (key, zone_game) = zone_key(&path);
+            (game.is_none() || zone_game == game).then_some((key, path))
+        })
+        .collect();
+    hits.sort();
+    if !hits.is_empty() {
         return hits.into_iter().map(Ok).collect();
     }
-    match asset_transport::find_zone_file(root, target) {
-        Ok(zone) => vec![Ok((target.to_owned(), zone.path))],
-        Err(reason) => vec![Err(reason)],
+    if !pattern::is_pattern(target) {
+        for root in roots {
+            if let Ok(zone) = asset_transport::find_zone_file(root, target) {
+                return vec![Ok((target.to_owned(), zone.path))];
+            }
+        }
     }
+    vec![Err(format!("no .ff matches under {}", roots_label(roots)))]
 }
 
 fn zone_key(path: &Path) -> (String, Option<ZoneGame>) {
@@ -195,27 +261,18 @@ fn zone_key(path: &Path) -> (String, Option<ZoneGame>) {
 
 fn pattern_filter(filter: &str) -> (Option<ZoneGame>, String) {
     let lowered = filter.trim().to_ascii_lowercase();
-    let (game, stem) = asset_transport::split_zone_key(&lowered);
-    (game, stem.to_owned())
+    if let Some((prefix, rest)) = lowered.split_once(':')
+        && let Some(game) = ZoneGame::from_prefix(prefix)
+    {
+        let rest = if rest.is_empty() { "*" } else { rest };
+        return (Some(game), rest.to_owned());
+    }
+    (None, lowered)
 }
 
 fn stem_of(path: &Path) -> String {
     path.file_stem()
         .map_or_else(String::new, |s| s.to_string_lossy().to_ascii_lowercase())
-}
-
-fn matching_zones(root: &GamesRoot, target: &str) -> Vec<(String, PathBuf)> {
-    let (game, stem_pattern) = pattern_filter(target);
-    let mut hits: Vec<(String, PathBuf)> = asset_transport::zone_files(root)
-        .filter_map(Result::ok)
-        .filter(|path| pattern::matches(&stem_pattern, &stem_of(path)))
-        .filter_map(|path| {
-            let (key, zone_game) = zone_key(&path);
-            (game.is_none() || zone_game == game).then_some((key, path))
-        })
-        .collect();
-    hits.sort();
-    hits
 }
 
 struct Envelope {
@@ -251,7 +308,7 @@ fn read_envelope(path: &Path) -> Result<Envelope, String> {
     })
 }
 
-fn list(root: &GamesRoot, filter: Option<&str>, out: &mut dyn Write) -> i32 {
+fn list(roots: &[GamesRoot], filter: Option<&str>, out: &mut dyn Write) -> i32 {
     let filter = filter.map(|f| {
         let (game, stem) = pattern_filter(f);
         let stem = if pattern::is_pattern(&stem) {
@@ -262,16 +319,11 @@ fn list(root: &GamesRoot, filter: Option<&str>, out: &mut dyn Write) -> i32 {
         (game, stem)
     });
     let mut rows = Vec::new();
-    let mut errors = 0usize;
-    for entry in asset_transport::zone_files(root) {
-        let path = match entry {
-            Ok(path) => path,
-            Err(reason) => {
-                errors += 1;
-                emit(out, &format!("{PREFIX} warn reason={}", quoted(&reason)));
-                continue;
-            }
-        };
+    let (files, errors) = zone_files(roots);
+    for reason in &errors {
+        emit(out, &format!("{PREFIX} warn reason={}", quoted(reason)));
+    }
+    for path in files {
         let (key, game) = zone_key(&path);
         if let Some((want_game, stem_pattern)) = &filter
             && (!pattern::matches(stem_pattern, &stem_of(&path))
@@ -304,9 +356,10 @@ fn list(root: &GamesRoot, filter: Option<&str>, out: &mut dyn Write) -> i32 {
     emit(
         out,
         &format!(
-            "{PREFIX} listed zones={} errors={errors} root={}",
+            "{PREFIX} listed zones={} errors={} roots={}",
             rows.len(),
-            quoted(&root.0.display().to_string())
+            errors.len(),
+            quoted(&roots_label(roots))
         ),
     );
     EXIT_COMPLETE
@@ -316,7 +369,7 @@ fn inspect_file(
     label: &str,
     path: &Path,
     names: bool,
-    artifacts: Option<&Path>,
+    report: Option<(&Path, &mut HashSet<String>)>,
     out: &mut dyn Write,
 ) -> i32 {
     let mut head = Vec::new();
@@ -357,7 +410,8 @@ fn inspect_file(
         }
     }
     let mut tail = tail;
-    let written = artifacts.map(|dir| write_report(dir, path, &head, inventory.as_ref(), &tail));
+    let written =
+        report.map(|(dir, used)| write_report(dir, used, path, &head, inventory.as_ref(), &tail));
     match written {
         Some(Ok(report)) => tail.push(format!(
             "{PREFIX} report path={}",
@@ -446,8 +500,8 @@ fn inventory_for(
     }
 }
 
-fn report_file_name(label: &str) -> String {
-    let name: String = label
+fn report_file_name(key: &str, used: &mut HashSet<String>) -> String {
+    let base: String = key
         .chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.' {
@@ -457,11 +511,19 @@ fn report_file_name(label: &str) -> String {
             }
         })
         .collect();
-    format!("{}.txt", name.trim_matches('_'))
+    let base = base.trim_matches('_').to_owned();
+    let mut name = format!("{base}.txt");
+    let mut n = 2;
+    while !used.insert(name.clone()) {
+        name = format!("{base}-{n}.txt");
+        n += 1;
+    }
+    name
 }
 
 fn write_report(
     artifacts: &Path,
+    used: &mut HashSet<String>,
     path: &Path,
     head: &[String],
     inventory: Option<&T5Inventory>,
@@ -469,7 +531,7 @@ fn write_report(
 ) -> Result<PathBuf, String> {
     let dir = artifacts.join("inspect");
     std::fs::create_dir_all(&dir).map_err(|error| format!("{}: {error}", dir.display()))?;
-    let file = dir.join(report_file_name(&zone_key(path).0));
+    let file = dir.join(report_file_name(&zone_key(path).0, used));
     let text = report::full_report(path, head, inventory, tail);
     std::fs::write(&file, text).map_err(|error| format!("{}: {error}", file.display()))?;
     Ok(file)

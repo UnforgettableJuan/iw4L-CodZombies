@@ -99,6 +99,54 @@ pub fn link_steam_games(_root: &GamesRoot) -> SteamProbe {
     SteamProbe::default()
 }
 
+pub const STEAM_COD_FOLDERS: [&str; 4] = [
+    "Call of Duty Modern Warfare 2",
+    "Call of Duty Modern Warfare 3",
+    "Call of Duty Black Ops",
+    "Call of Duty Black Ops II",
+];
+
+pub fn steam_cod_folders() -> Vec<PathBuf> {
+    steam_libraries()
+        .iter()
+        .flat_map(|library| {
+            STEAM_COD_FOLDERS
+                .iter()
+                .map(move |folder| library.join("steamapps").join("common").join(folder))
+        })
+        .filter(|path| path.is_dir())
+        .collect()
+}
+
+#[cfg(not(windows))]
+fn steam_libraries() -> Vec<PathBuf> {
+    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
+        return Vec::new();
+    };
+    let mut libraries: Vec<PathBuf> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for install in [
+        ".steam/steam",
+        ".local/share/Steam",
+        ".var/app/com.valvesoftware.Steam/.local/share/Steam",
+    ]
+    .map(|dir| home.join(dir))
+    {
+        let vdf = install.join("steamapps").join("libraryfolders.vdf");
+        let listed = std::fs::read_to_string(&vdf)
+            .map(|text| steam_library_paths(&text))
+            .unwrap_or_else(|_| Vec::new());
+        for library in std::iter::once(install).chain(listed) {
+            if let Ok(canonical) = std::fs::canonicalize(&library)
+                && seen.insert(canonical)
+            {
+                libraries.push(library);
+            }
+        }
+    }
+    libraries
+}
+
 #[cfg(windows)]
 fn has_game(roots: &[PathBuf], game: ZoneGame) -> bool {
     roots.iter().any(|root| {
@@ -194,7 +242,6 @@ fn steam_libraries() -> Vec<PathBuf> {
     libraries
 }
 
-#[cfg(windows)]
 fn steam_library_paths(vdf: &str) -> Vec<PathBuf> {
     vdf.lines()
         .filter_map(|line| line.trim().strip_prefix("\"path\""))

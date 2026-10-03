@@ -65,3 +65,23 @@ jobs:
           -p zone_inspect -p launcher -p bootstrap -p asset_transport
           -- -D warnings
       - run: cargo test --locked --workspace --profile play
+
+  windows-exe:
+    name: iw4l.exe (Windows)
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/zombies/')
+    runs-on: windows-2022
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: windows
+          cache-on-failure: true
+      - run: cargo build --locked --profile play -p launcher
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iw4l-windows-${{ github.sha }}
+          path: target/play/iw4l.exe
+          if-no-files-found: error
+          retention-days: 30

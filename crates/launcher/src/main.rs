@@ -65,10 +65,19 @@ fn inspect_zone() -> i32 {
         .skip(2)
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect();
-    let artifacts = ensure_artifacts_dir().ok();
-    if let Some(artifacts) = &artifacts {
-        announce_log(diag::init_log(artifacts));
-    }
+    let artifacts = match ensure_artifacts_dir() {
+        Ok(artifacts) => {
+            announce_log(diag::init_log(&artifacts));
+            Some(artifacts)
+        }
+        Err(error) => {
+            diag::announce_stdout(&format!(
+                "inspect: warn reason=\"no artifacts folder ({}); reports and the log are not written\"",
+                error.replace('"', "'")
+            ));
+            None
+        }
+    };
     let code = zone_inspect::run(&args, artifacts.as_deref(), &mut std::io::stdout().lock());
     diag::flush();
     code

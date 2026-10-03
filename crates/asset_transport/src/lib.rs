@@ -28,7 +28,10 @@ pub use progress::{
     StageOutcome, StageScope, StageSnapshot, WorkCount, peak_resident_bytes,
     process_resident_bytes,
 };
-pub use steam::{MW2_SHORTCUT, SteamCandidate, SteamProbe, link_steam_games};
+pub use steam::{
+    MW2_SHORTCUT, STEAM_COD_FOLDERS, SteamCandidate, SteamProbe, link_steam_games,
+    steam_cod_folders,
+};
 pub use zone::{
     Iw4WireFormat, Iw5ZoneMemory, T5ZoneMemory, ZoneImage, ZoneMemory, ZoneOpenError, open_zone,
     open_zone_shared, parse_zone_image, xfile_arena_row, zone_share_counts,

@@ -74,8 +74,16 @@ pub fn summary(inventory: &T5Inventory, names: bool) -> Vec<String> {
             stop.cursor_after,
             quoted(&stop.reason)
         ));
-        for (label, name) in &stop.recent {
-            lines.push(format!("{PREFIX} stop_recent {label}={}", quoted(name)));
+        if !stop.last_named.is_empty() {
+            let named: Vec<String> = stop
+                .last_named
+                .iter()
+                .map(|(label, name)| format!("{label}={}", quoted(name)))
+                .collect();
+            lines.push(format!(
+                "{PREFIX} stop_context parsed_before_stop {}",
+                named.join(" ")
+            ));
         }
         lines.push(format!(
             "{PREFIX} stop_detail unsettled_offsets={} first_unsettled={} next_bytes={}",
