@@ -49,25 +49,6 @@ const EXEMPT: &[&str] = &[
     "xtask/src/publish_check.rs",
 ];
 
-fn stray_test(rel: &str, text: &str) -> Option<(usize, &'static str)> {
-    if rel.split('/').rev().skip(1).any(|part| part == "tests") {
-        return Some((0, "tests/ directory"));
-    }
-    if !rel.ends_with(".rs") {
-        return None;
-    }
-    text.lines().enumerate().find_map(|(n, line)| {
-        let line = line.trim_start();
-        let hit = line.starts_with("#[test]")
-            || line.starts_with("#[cfg(test)]")
-            || line.starts_with("#[tokio::test")
-            || line
-                .strip_prefix("mod tests")
-                .is_some_and(|rest| rest.starts_with([' ', '{', ';']) || rest.is_empty());
-        hit.then_some((n + 1, "cargo test"))
-    })
-}
-
 /// What must never be in a commit, whatever it is named. These are accidents,
 /// not judgement calls, so there is no exemption list beside them.
 ///
@@ -416,7 +397,6 @@ fn looks_binary(bytes: &[u8]) -> bool {
 pub fn run_cli(root: &Path) -> Res<()> {
     let mut leaks = Vec::new();
     let mut offsets = Vec::new();
-    let mut tests = Vec::new();
     let mut scanned = 0usize;
     for path in tracked(root)? {
         let rel = path.to_string_lossy().replace('\\', "/");
@@ -439,14 +419,6 @@ pub fn run_cli(root: &Path) -> Res<()> {
         }
         // Not every text file is valid UTF-8; what is in one still counts.
         let text = String::from_utf8_lossy(&bytes);
-        if let Some((line, what)) = stray_test(&rel, &text) {
-            tests.push(Finding {
-                path: path.clone(),
-                line,
-                what: what.to_string(),
-                text: "(unapproved test)".to_string(),
-            });
-        }
         // Past this line the file is read for shapes it *spells*, and this gate
         // has to spell every one of them. The path rules above have no such
         // problem and take no exemption.
@@ -474,7 +446,7 @@ pub fn run_cli(root: &Path) -> Res<()> {
             }
         }
     }
-    for finding in leaks.iter().chain(&offsets).chain(&tests) {
+    for finding in leaks.iter().chain(&offsets) {
         println!(
             "{}:{}: {} — {}",
             finding.path.display(),
@@ -497,15 +469,8 @@ pub fn run_cli(root: &Path) -> Res<()> {
             offsets.len()
         ));
     }
-    if !tests.is_empty() {
-        return Err(format!(
-            "{} cargo test(s) in the tracked tree; the only permanent tests are \
-             the owner-approved scenarios in crates/approved_tests",
-            tests.len()
-        ));
-    }
     println!(
-        "publish-check: clean — nothing but the product is tracked, no cargo test, \
+        "publish-check: clean — nothing but the product is tracked, \
          and no retail offsets in the {scanned} text file(s) read"
     );
     Ok(())

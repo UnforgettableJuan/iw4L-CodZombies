@@ -69,6 +69,7 @@ members = [
     "crates/updater",
     "crates/weapon_iw4",
     "crates/xmodel_runtime",
+    "crates/zone_inspect",
     "xtask",
 ]
 
@@ -167,6 +168,7 @@ trace_iw4 = { path = "crates/trace_iw4" }
 ui = { path = "crates/ui" }
 weapon_iw4 = { path = "crates/weapon_iw4" }
 xmodel_runtime = { path = "crates/xmodel_runtime" }
+zone_inspect = { path = "crates/zone_inspect" }
 glam = "0.32.1"
 
 # Transcribing a retail constant at full precision is the requirement, not a

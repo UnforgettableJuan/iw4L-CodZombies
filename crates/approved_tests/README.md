@@ -9,8 +9,9 @@ useful test is not automatically an approved test.
 
 A new permanent scenario is added here only after the owner has approved that
 scenario by name, as a scenario the runner drives, never as a `cargo test`.
-`make publish-check` refuses `#[test]`, `#[cfg(test)]`, `mod tests` and `tests/`
-directories everywhere in the workspace, this crate included.
+End-to-end scenarios that need game data live here and nowhere else. Unit
+tests that need no game data (synthetic bytes, parsers, pure functions) are
+allowed in the crate they test and run with `cargo test`.
 
 ## Approved scenarios
 

@@ -6,6 +6,9 @@ loads that installation's maps, models, textures and weapons into its own engine
 can try implemented movement and combat on multiplayer maps, then inspect or change how
 those systems work.
 
+**This fork, IW4L-CodZombies,** works toward playing Call of Duty Zombies maps from Black
+Ops and Black Ops II in the same runtime. Start with [docs/ZOMBIES.md](docs/ZOMBIES.md).
+
 <p align="center">
   <img src="docs/screenshots/bomb-plant.jpg" width="49%" alt="Bomb planting in IW4L">
   <img src="docs/screenshots/tanker-explosion.jpg" width="49%" alt="Tanker explosion in IW4L">

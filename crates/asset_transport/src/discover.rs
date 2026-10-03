@@ -162,6 +162,15 @@ fn game_files(root: &Path) -> impl Iterator<Item = Result<PathBuf, String>> {
     files_under(search_roots(root))
 }
 
+pub fn zone_files(root: &GamesRoot) -> impl Iterator<Item = Result<PathBuf, String>> {
+    game_files(&root.0).filter(|entry| match entry {
+        Ok(path) => path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("ff")),
+        Err(_) => true,
+    })
+}
+
 fn files_under(roots: Vec<PathBuf>) -> impl Iterator<Item = Result<PathBuf, String>> {
     let mut pending: VecDeque<_> = roots.into_iter().map(Ok).collect();
     let mut visited = HashSet::new();

@@ -32,6 +32,12 @@ fn main() {
         }
         return;
     }
+    if std::env::args_os()
+        .nth(1)
+        .is_some_and(|arg| arg == zone_inspect::COMMAND)
+    {
+        std::process::exit(inspect_zone());
+    }
     let mut args = match updater::startup().unwrap_or_else(|e| diag::exit_launch_error(&e)) {
         Some(args) => args,
         None => return,
@@ -52,6 +58,20 @@ fn main() {
     .unwrap_or_else(|e| diag::exit_launch_error(&e));
     let games = games_root_from_env().unwrap_or_else(|e| diag::exit_launch_error(&e));
     bootstrap::launch(games, artifacts, mode, acceptance, cheats);
+}
+
+fn inspect_zone() -> i32 {
+    let args: Vec<String> = std::env::args_os()
+        .skip(2)
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    let artifacts = ensure_artifacts_dir().ok();
+    if let Some(artifacts) = &artifacts {
+        announce_log(diag::init_log(artifacts));
+    }
+    let code = zone_inspect::run(&args, artifacts.as_deref(), &mut std::io::stdout().lock());
+    diag::flush();
+    code
 }
 
 fn prepare_process_root() -> Result<(), String> {

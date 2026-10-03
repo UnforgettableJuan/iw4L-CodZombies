@@ -1,0 +1,16 @@
+[package]
+name = "zone_inspect"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Headless zone inventory: what a FastFile holds, what the walk parses, and where it stops."
+
+[dependencies]
+asset_transport.workspace = true
+fastfile_t5.workspace = true
+
+[dev-dependencies]
+flate2.workspace = true
+
+[lints]
+workspace = true

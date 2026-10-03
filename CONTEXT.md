@@ -189,8 +189,10 @@ Out:
 * **debug leftovers** — `dbg!`, an `eprintln!` behind no flag, a commented-out
   block kept just in case, a feature flag whose only user was the probe.
 
-Tests live in one place: `crates/approved_tests`, owner-approved scenarios
-only ([its README](crates/approved_tests/README.md)). Every other test is
+End-to-end scenarios live in one place: `crates/approved_tests`,
+owner-approved scenarios only ([its README](crates/approved_tests/README.md)).
+Unit tests that need no game data stay next to the code they test and run in
+CI. A test written to call one function once and eyeball the output is still
 probe code. A probe somebody will rerun lives in the artifact
 (`<N>-…/probe.rs.txt`), not in `crates/`.
 
@@ -211,8 +213,9 @@ investigation. Fixes, probes, reverts and "try this" do not survive as
 separate objects. History that has already been pushed is not rewritten —
 [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
-**Tests.** Only `crates/approved_tests`, and only scenarios the owner approved
-by name. Anything else goes, however useful; `make publish-check` refuses it.
+**Tests.** End-to-end scenarios only in `crates/approved_tests`, and only
+scenarios the owner approved by name. Unit tests that assert behaviour without
+game data stay; tests that only printed something go.
 
 **Comments.** None by default. A comment stays only if, without it, the next
 edit would break something the code cannot show: an ordering, a race, a

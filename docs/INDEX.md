@@ -23,3 +23,4 @@ game. Keep them this short: nobody opens a long file twice.
 | [`GSC-RUNTIME.md`](GSC-RUNTIME.md) | GSC → executable IR → Bevy runtime; args, arrays and tables still share one `Runtime` | implementing gameplay or script execution |
 | [`GSC-POSTFX.md`](GSC-POSTFX.md) | script vision, color correction, blur, DoF and bloom | authoring or debugging GSC post effects |
 | [`BOTS.md`](BOTS.md) | host AI: the per-tick pipeline, what a probe that never ran may not claim, the shared query budget, resumable routes, fighting from a position | bot decisions, bot movement, "why is it standing there" |
+| [`ZOMBIES.md`](ZOMBIES.md) | this fork's goal (BO1 and BO2 zombies maps), `iw4l inspect-zone`, the roadmap | starting zombies work, inventorying a zone |

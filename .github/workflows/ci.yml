@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
+
+jobs:
+  gates:
+    name: fmt + publish-check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all --check
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: xtask
+          cache-on-failure: true
+      - run: cargo xtask publish-check
+
+  build:
+    name: check + clippy + tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      # docs/BUILD.md: alsa-sys, libudev-sys and wayland-sys probe these at build time.
+      - name: System packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++ pkg-config libx11-dev libasound2-dev libudev-dev \
+            libwayland-dev libxkbcommon-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: workspace
+          cache-on-failure: true
+      - run: cargo check --locked --workspace --all-targets --profile play
+      # Upstream carries ~1,300 clippy warnings, so the workspace pass fails on
+      # errors only; crates listed in the strict pass must stay warning-free.
+      - run: cargo clippy --locked --workspace --all-targets --profile play
+      - name: clippy (strict)
+        run: >
+          cargo clippy --locked --no-deps --all-targets --profile play
+          -p zone_inspect -p launcher -p bootstrap -p asset_transport
+          -- -D warnings
+      - run: cargo test --locked --workspace --profile play

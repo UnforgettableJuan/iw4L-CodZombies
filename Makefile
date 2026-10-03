@@ -10,7 +10,7 @@ endif
 GOAL := $(firstword $(MAKECMDGOALS))
 ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 
-.PHONY: map export-gltf play bench bench-load-session bench-live bench-overhead bench-perf menu menu-shots scenario chaos lifecycle-all lifecycle-swap lifecycle-replace lifecycle-play-in lifecycle-demo-out lifecycle-demo-map launcher deploy logs loc clean help
+.PHONY: map export-gltf inspect-zone play bench bench-load-session bench-live bench-overhead bench-perf menu menu-shots scenario chaos lifecycle-all lifecycle-swap lifecycle-replace lifecycle-play-in lifecycle-demo-out lifecycle-demo-map launcher deploy logs loc clean help
 .PHONY: build-windows setup-windows release publish provision
 .PHONY: mr publish-check approved
 .PHONY: $(ARGS)
@@ -90,6 +90,16 @@ map: require-games
 export-gltf: require-games
 	@test -n "$(or $(ZONE),$(ARGS))" || { echo "usage: make export-gltf <zone>"; exit 1; }
 	cd $(ROOT) && $(CARGO) run $(PROFILE_ARG) -p launcher -- export-gltf $(or $(ZONE),$(ARGS))
+
+# Headless zone inventory: asset types, what the walk parses, where it stops,
+# map entities. No window, no GPU; a .ff path needs no IW4L_GAMES.
+# A t5: prefix carries a colon, which make reads as a pattern: use ZONE=.
+#   make inspect-zone ZONE=t5:zombie_theater
+#   make inspect-zone ZONE='t5:zombie_*' NAMES=1
+#   make inspect-zone LIST=zombie
+inspect-zone:
+	@test -n "$(or $(ZONE),$(ARGS),$(LIST))" || { echo "usage: make inspect-zone <zone|path>   ZONE='t5:zombie_*'   LIST=zombie"; exit 1; }
+	cd $(ROOT) && $(CARGO) run $(PROFILE_ARG) -p launcher -- inspect-zone $(if $(LIST),--list '$(LIST)',$(if $(ZONE),'$(ZONE)',$(ARGS))) $(if $(NAMES),--names,)
 
 # Play a recorded demo under iw4l-artifacts/demos/<name>.iw4ldemo, then quit.
 # CMDS= still runs during playback (wait world; quit).
@@ -319,6 +329,7 @@ help:
 	@echo "                  add CMDS='spawn 0; hold +attack' to script it"
 	@echo "                  sync-by-default: map/demo/disconnect/spawn block the FIFO"
 	@echo "                  until done; trailing '&' opts out (map mp_rust &)"
+	@echo "make inspect-zone <zone>  headless zone inventory (ZONE='t5:zombie_*', LIST=zombie, NAMES=1)"
 	@echo "make play <demo>  play iw4l-artifacts/demos/<demo>.iw4ldemo, then quit"
 	@echo "                  ZONE= overrides header"
 	@echo "                  CMDS='wait world; wait 5s; quit' mid-play"
