@@ -5,6 +5,7 @@ pub mod load_jobs;
 pub mod namespace_trees;
 pub mod progress;
 pub mod steam;
+pub mod zombies;
 pub mod zone;
 
 pub use artifact_cache::{CacheFlight, cache_flight, cache_get, cache_put, fnv1a64, fnv1a64_more};
@@ -29,6 +30,10 @@ pub use progress::{
     process_resident_bytes,
 };
 pub use steam::{MW2_SHORTCUT, SteamCandidate, SteamProbe, link_steam_games};
+pub use zombies::{
+    InstalledZombiesMap, ZOMBIES_MAPS, ZombiesGame, ZombiesMap, ZombiesZone, list_zombies_maps,
+    zombies_map, zombies_report,
+};
 pub use zone::{
     Iw4WireFormat, Iw5ZoneMemory, T5ZoneMemory, ZoneImage, ZoneMemory, ZoneOpenError, open_zone,
     open_zone_shared, parse_zone_image, xfile_arena_row, zone_share_counts,

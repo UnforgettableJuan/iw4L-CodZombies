@@ -152,13 +152,16 @@ fn read_zone_version(path: &Path) -> Result<u32, String> {
     use std::io::Read;
     file.read_exact(&mut header)
         .map_err(|error| error.to_string())?;
-    if &header[0..4] != b"IWff" {
-        return Err(format!("not an IWff envelope: {:02x?}", &header[..8]));
+    if &header[0..4] != b"IWff" && &header[0..4] != b"TAff" {
+        return Err(format!(
+            "not an IWff or TAff envelope: {:02x?}",
+            &header[..8]
+        ));
     }
     Ok(u32::from_le_bytes(header[8..12].try_into().unwrap()))
 }
 
-fn game_files(root: &Path) -> impl Iterator<Item = Result<PathBuf, String>> {
+pub(crate) fn game_files(root: &Path) -> impl Iterator<Item = Result<PathBuf, String>> {
     files_under(search_roots(root))
 }
 
