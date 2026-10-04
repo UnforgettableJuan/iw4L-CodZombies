@@ -273,6 +273,9 @@ fn run_menu(
         diag::warn!(Launch, "{error}");
         fatal(&mw2_not_found(&games, steam))
     });
+    for line in asset_transport::zombies_report(&games) {
+        diag::info!(Launch, "{line}");
+    }
     let shell_common = assets::load_pool().spawn(assets::load_shell_common(games.clone()));
     let (mut menus, menu_report) = load_ui_menu_catalog(&ui_games);
     ui::install_frontend_menus(&mut menus).unwrap_or_else(|error| fatal(&error));
